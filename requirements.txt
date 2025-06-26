@@ -1,8 +1,2 @@
 openai>=1.13.3
-pyyaml
-cx_Freeze
-playwright
-uuid
-ttkbootstrap==0.5.1
-immutable_views
 nbtlib
