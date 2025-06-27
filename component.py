@@ -6,11 +6,12 @@ import streamlit as st
 
 from utils import LLM
 from . import core
-import cube_mcschematic as mcschematic
+from . import cube_mcschematic as mcschematic
 
 class BuilderGPTComponent(BaseComponent):
     name = "BuilderGPT"
     description = "Generate Minecraft structures"
+    requirements = ["nbtlib"]
 
     def __init__(self):
         self.llm = LLM()

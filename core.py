@@ -1,5 +1,4 @@
 import json
-import locale
 import cube_mcschematic as mcschematic
 from log_writer import logger
 from utils import LLM
@@ -7,20 +6,6 @@ from utils import LLM
 VERSION = "2.0.0"
 
 llm = LLM()
-
-def initialize():
-    """Initialize the module and write a log entry."""
-    locale.setlocale(locale.LC_ALL, "en_US.UTF-8")
-    logger(f"Launch. Software version {VERSION}")
-
-
-def ask_llm(system_prompt: str, user_prompt: str) -> str:
-    """Wrapper around the LLM helper."""
-    logger(f"ask_llm: system {system_prompt}")
-    logger(f"ask_llm: user {user_prompt}")
-    response = llm.ask(system_prompt, user_prompt)
-    logger(f"ask_llm: response {response}")
-    return response
 
 
 def text_to_schem(text: str, export_type: str = "schem"):
