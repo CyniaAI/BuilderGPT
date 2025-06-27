@@ -1,130 +1,22 @@
-from openai import OpenAI
-import cube_mcschematic as mcschematic
-import sys
 import json
-import locale
-
+import os
+from . import cmcschematic as mcschematic
 from log_writer import logger
-import config
+from utils import LLM
 
-def initialize():
-    """
-    Initializes the software.
+VERSION = "2.0.0"
 
-    This function logs the software launch, including the version number and platform.
+llm = LLM()
 
-    Args:
-        None
-
-    Returns:
-        None
-    """
-    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-    logger(f"Launch. Software version {config.VERSION_NUMBER}, platform {sys.platform}")
-
-def askgpt(system_prompt: str, user_prompt: str, model_name: str, disable_json_mode: bool = False, image_url: str = None):
-    """
-    Interacts with ChatGPT using the specified prompts.
-
-    Args:
-        system_prompt (str): The system prompt.
-        user_prompt (str): The user prompt.
-        model_name (str): The model name to use.
-        disable_json_mode (bool): Whether to disable JSON mode.
-
-    Returns:
-        str: The response from ChatGPT.
-    """
-    if image_url is not None and config.USE_DIFFERENT_APIKEY_FOR_VISION_MODEL:
-        logger("Using different API key for vision model.")
-        client = OpenAI(api_key=config.VISION_API_KEY, base_url=config.VISION_BASE_URL)
-    else:
-        client = OpenAI(api_key=config.API_KEY, base_url=config.BASE_URL)
-
-    logger("Initialized the OpenAI client.")
-
-    # Define the messages for the conversation
-    if image_url is not None:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [
-                {"type": "text", "text": user_prompt},
-                {"type": "image_url", "image_url": {"url": image_url}}
-                ]
-            }
-        ]
-    else:
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-
-
-    logger(f"askgpt: system {system_prompt}")
-    logger(f"askgpt: user {user_prompt}")
-
-    # Create a chat completion
-    response = client.chat.completions.create(
-        model=model_name,
-        messages=messages
-    )
-
-    logger(f"askgpt: response {response}")
-
-    # Extract the assistant's reply
-    assistant_reply = response.choices[0].message.content
-    logger(f"askgpt: extracted reply {assistant_reply}")
-    return assistant_reply
-
-def ask_dall_e(description: str):
-    """
-    Generates a design image using the DALL-E API.
-
-    Args:
-        description (str): The prompt or description for generating the image.
-
-    Returns:
-        str: The URL of the generated image.
-    """
-    if config.USE_DIFFERENT_APIKEY_FOR_DALLE_MODEL:
-        client = OpenAI(api_key=config.DALLE_API_KEY, base_url=config.DALLE_BASE_URL)
-    else:
-        client = OpenAI(api_key=config.API_KEY, base_url=config.BASE_URL)
-
-    logger("ask_dall_e: Generating design image using DALL-E API.")
-
-    response = client.images.generate(
-        model=config.IMAGE_GENERATION_MODEL,
-        prompt=description,
-        size=config.IMAGE_SIZE,
-        quality="standard",
-        n=1,
-    )
-
-    image_url = response.data[0].url
-
-    logger(f"ask_dall_e: Generated image URL {image_url}")
-
-    return image_url
 
 def text_to_schem(text: str, export_type: str = "schem"):
-    """
-    Converts a JSON string to a Minecraft schematic.
-
-    Args:
-        text (str): The JSON string to convert.
-        
-    Returns:
-        mcschematic.MCSchematic: The Minecraft schematic.
-    
-    """
+    """Convert a JSON string to a Minecraft schematic or mcfunction file."""
     try:
         data = json.loads(text)
-        logger(f"text_to_command: loaded JSON data {data}")
+        logger(f"text_to_schem: loaded JSON data {data}")
 
         if export_type == "schem":
             schematic = mcschematic.MCSchematic()
-
             for structure in data["structures"]:
                 block_id = structure["block"]
                 x = structure["x"]
@@ -135,19 +27,20 @@ def text_to_schem(text: str, export_type: str = "schem"):
                     to_x = structure["toX"]
                     to_y = structure["toY"]
                     to_z = structure["toZ"]
-
-                    for x in range(x, to_x + 1):
-                        for y in range(y, to_y + 1):
-                            for z in range(z, to_z + 1):
-                                schematic.setBlock((x, y, z), block_id)
-
+                    for ix in range(x, to_x + 1):
+                        for iy in range(y, to_y + 1):
+                            for iz in range(z, to_z + 1):
+                                schematic.setBlock((ix, iy, iz), block_id)
                 else:
                     schematic.setBlock((x, y, z), block_id)
-            
             return schematic
-        
         elif export_type == "mcfunction":
-            with open("generated/temp.mcfunction", "w") as f:
+            # Create the generated directory if it doesn't exist
+            if not os.path.isdir("generated"):
+                os.makedirs("generated")
+            
+            temp_path = os.path.join("generated", "temp.mcfunction")
+            with open(temp_path, "w") as f:
                 for structure in data["structures"]:
                     block_id = structure["block"]
                     x = structure["x"]
@@ -158,46 +51,22 @@ def text_to_schem(text: str, export_type: str = "schem"):
                         to_x = structure["toX"]
                         to_y = structure["toY"]
                         to_z = structure["toZ"]
-
-                        for x in range(x, to_x + 1):
-                            for y in range(y, to_y + 1):
-                                for z in range(z, to_z + 1):
-                                    f.write(f"setblock {x} {y} {z} {block_id}\n")
-
+                        for ix in range(x, to_x + 1):
+                            for iy in range(y, to_y + 1):
+                                for iz in range(z, to_z + 1):
+                                    f.write(f"setblock {ix} {iy} {iz} {block_id}\n")
                     else:
                         f.write(f"setblock {x} {y} {z} {block_id}\n")
-            
-            return None
-
-    
-    except (json.decoder.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError, IndexError) as e:
-        logger(f"text_to_command: failed to load JSON data. Error message: {e}")
-
-        if config.DEBUG_MODE:
-            raise e
-        
+            return temp_path
+    except Exception as e:
+        logger(f"text_to_schem: failed to load JSON data. Error: {e}")
         return None
 
-def input_version_to_mcs_tag(input_version):
-    """
-    Converts an input version string to the corresponding MCSchematic tag.
 
-    Args:
-        input_version (str): The input version string in the format "X.Y.Z".
-
-    Returns:
-        str: The MCSchematic tag corresponding to the input version.
-
-    Example:
-        >>> input_version_to_mcs_tag("1.20.1")
-        'JE_1_20_1'
-    """
+def input_version_to_mcs_tag(input_version: str):
+    """Convert an input version string to the corresponding MCSchematic tag."""
     try:
-        result = getattr(mcschematic.Version, input_version)
-    except (AttributeError, IndexError) as e:
+        return getattr(mcschematic.Version, input_version)
+    except Exception as e:
         logger(f"input_version_to_mcs_tag: failed to convert version {input_version}; {e}")
         return None
-    return result
-
-if __name__ == "__main__":
-    print("This script is not meant to be run directly. Please run console.py instead.")
