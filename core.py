@@ -1,5 +1,6 @@
 import json
-import cube_mcschematic as mcschematic
+import os
+from . import cmcschematic as mcschematic
 from log_writer import logger
 from utils import LLM
 
@@ -34,7 +35,12 @@ def text_to_schem(text: str, export_type: str = "schem"):
                     schematic.setBlock((x, y, z), block_id)
             return schematic
         elif export_type == "mcfunction":
-            with open("generated/temp.mcfunction", "w") as f:
+            # Create the generated directory if it doesn't exist
+            if not os.path.isdir("generated"):
+                os.makedirs("generated")
+            
+            temp_path = os.path.join("generated", "temp.mcfunction")
+            with open(temp_path, "w") as f:
                 for structure in data["structures"]:
                     block_id = structure["block"]
                     x = structure["x"]
@@ -51,7 +57,7 @@ def text_to_schem(text: str, export_type: str = "schem"):
                                     f.write(f"setblock {ix} {iy} {iz} {block_id}\n")
                     else:
                         f.write(f"setblock {x} {y} {z} {block_id}\n")
-            return None
+            return temp_path
     except Exception as e:
         logger(f"text_to_schem: failed to load JSON data. Error: {e}")
         return None

@@ -12,7 +12,7 @@ BuilderGPT lets you describe a building and have a language model produce a read
    ```bash
    pip install -r components/BuilderGPT/requirements.txt
    ```
-4. Start the Cynia Agents UI (`streamlit run app.py`).
+4. Start the Cynia Agents UI (`python -m streamlit run web.py`).
 5. Enable **BuilderGPT** from the *Component Center* page.
 
 ## Usage
