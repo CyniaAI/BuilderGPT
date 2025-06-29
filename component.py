@@ -12,7 +12,6 @@ from . import cmcschematic as mcschematic
 class BuilderGPTComponent(BaseComponent):
     name = "BuilderGPT"
     description = "Generate Minecraft structures"
-    requirements = ["nbtlib", "immutable_views"]
 
     def __init__(self):
         self.llm = LLM()
