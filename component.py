@@ -12,17 +12,37 @@ from . import cmcschematic as mcschematic
 class BuilderGPTComponent(BaseComponent):
     name = "BuilderGPT"
     description = "Generate Minecraft structures"
+    version = "2.2.1"
+    supported_framework_versions = ">=1.0.0"
+    author_name = "CyniaAI Team"
+    author_link = "https://github.com/CyniaAI/BuilderGPT"
+    
+    # Class-level flag to prevent multiple initializations
+    _initialized = False
+    _instance = None
 
     def __init__(self):
+        # Prevent multiple initializations
+        if BuilderGPTComponent._initialized:
+            if BuilderGPTComponent._instance:
+                # Copy attributes from existing instance
+                self.llm = BuilderGPTComponent._instance.llm
+                self.prompts = BuilderGPTComponent._instance.prompts
+                self.block_id_list = BuilderGPTComponent._instance.block_id_list
+                return
+        
         self.llm = LLM()
         with open(os.path.join(os.path.dirname(__file__), "prompts.json"), "r") as f:
             self.prompts = json.load(f)
         with open(os.path.join(os.path.dirname(__file__), "block_id_list.txt"), "r") as f:
             self.block_id_list = f.read()
         
-        # Register artifact types
-        artifact_manager.register_artifact_type("schem")
-        artifact_manager.register_artifact_type("mcfunction")
+        # Register artifact types (only once)
+        if not BuilderGPTComponent._initialized:
+            artifact_manager.register_artifact_type("schem")
+            artifact_manager.register_artifact_type("mcfunction")
+            BuilderGPTComponent._initialized = True
+            BuilderGPTComponent._instance = self
 
     def generate(self, description, version, export_type, image_path=None, progress=None):
         sys_prompt = self.prompts["SYS_GEN"] + f"\n\nUsable Block ID List:\n{self.block_id_list}"
@@ -129,4 +149,7 @@ class BuilderGPTComponent(BaseComponent):
 
 
 def get_component():
+    # Return existing instance if available to prevent multiple initializations
+    if BuilderGPTComponent._instance and BuilderGPTComponent._initialized:
+        return BuilderGPTComponent._instance
     return BuilderGPTComponent()
