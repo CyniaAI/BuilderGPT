@@ -1,2 +1,4 @@
 immutable_views
 nbtlib
+quickjs
+mcschematic

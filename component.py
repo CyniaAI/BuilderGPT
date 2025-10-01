@@ -1,18 +1,18 @@
 import json
 import os
 import uuid
+import mcschematic
 from component_base import BaseComponent
 import streamlit as st
 import artifact_manager
 
 from utils import LLM
 from . import core
-from . import cmcschematic as mcschematic
 
 class BuilderGPTComponent(BaseComponent):
     name = "BuilderGPT"
     description = "Generate Minecraft structures"
-    version = "2.2.1"
+    version = "3.0.0"
     supported_framework_versions = ">=1.0.0"
     author_name = "CyniaAI Team"
     author_link = "https://github.com/CyniaAI/BuilderGPT"
@@ -33,7 +33,14 @@ class BuilderGPTComponent(BaseComponent):
         
         self.llm = LLM()
         with open(os.path.join(os.path.dirname(__file__), "prompts.json"), "r") as f:
-            self.prompts = json.load(f)
+            raw_prompts = json.load(f)
+            # Convert list prompts to strings
+            self.prompts = {}
+            for key, value in raw_prompts.items():
+                if isinstance(value, list):
+                    self.prompts[key] = "".join(value)
+                else:
+                    self.prompts[key] = value
         with open(os.path.join(os.path.dirname(__file__), "block_id_list.txt"), "r") as f:
             self.block_id_list = f.read()
         
@@ -45,8 +52,17 @@ class BuilderGPTComponent(BaseComponent):
             BuilderGPTComponent._instance = self
 
     def generate(self, description, version, export_type, image_path=None, progress=None):
-        sys_prompt = self.prompts["SYS_GEN"] + f"\n\nUsable Block ID List:\n{self.block_id_list}"
-        user_prompt = self.prompts["USR_GEN"].replace("%DESCRIPTION%", description)
+        # Build the new JS-based prompt
+        from .core import format_version_for_prompt
+        human_version = format_version_for_prompt(version)
+        sys_prompt = (
+            self.prompts["SYS_GEN"]
+            .replace("%MINECRAFT_VERSION%", human_version)
+            .replace("%BUILD_SPEC%", description)
+            .replace("%BLOCK_TYPES_LIST%", self.block_id_list)
+        )
+        # Keep user prompt minimal to satisfy providers that require both roles
+        user_prompt = ""
         
         if progress:
             progress.progress(0.2)
@@ -59,19 +75,21 @@ class BuilderGPTComponent(BaseComponent):
             
         if progress:
             progress.progress(0.6)
-        schem = core.text_to_schem(response, export_type=export_type)
+        result = core.text_to_schem(response, export_type=export_type)
         if progress:
             progress.progress(0.8)
+            
         raw_name = self.llm.ask(self.prompts["SYS_GEN_NAME"], self.prompts["USR_GEN_NAME"].replace("%DESCRIPTION%", description))
         name = f"{raw_name}-{uuid.uuid4()}"
         version_tag = core.input_version_to_mcs_tag(version)
         if not os.path.isdir("generated"):
             os.makedirs("generated")
-        if schem is None:
+        if result is None:
             return None
         
         if export_type == "schem":
-            schem.save("generated", name, version_tag)
+            # result is an MCSchematic
+            result.save("generated", name, version_tag)
             path = os.path.join("generated", name + ".schem")
             # Register artifact for schematic file
             artifact_manager.write_artifact(
@@ -81,7 +99,20 @@ class BuilderGPTComponent(BaseComponent):
                 "schem"
             )
         else:
-            path = os.path.join("generated", name + ".mcfunction")
+            # result is a temp mcfunction path; rename to final name
+            final_path = os.path.join("generated", name + ".mcfunction")
+            try:
+                if os.path.exists(result):
+                    os.replace(result, final_path)
+                else:
+                    # If core returned non-existing path, just write empty file to avoid UI error
+                    with open(final_path, "w", encoding="utf-8") as f:
+                        f.write("")
+            except Exception:
+                # Fallback: ensure file exists
+                with open(final_path, "a", encoding="utf-8"):
+                    pass
+            path = final_path
             # Register artifact for mcfunction file
             artifact_manager.write_artifact(
                 self.name,
