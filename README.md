@@ -12,6 +12,23 @@ A generative Minecraft structure tool for the [Cynia Agents](https://github.com/
 
 BuilderGPT lets you describe a building and have a language model produce a ready-to-use schematic. The component outputs either a `.schem` file or a `.mcfunction` script that can be imported into the game with tools like WorldEdit.
 
+## 🎉 BuilderGPT on ChatGPT is LIVE on the GPTs Store!
+
+We’re so excited to announce that **BuilderGPT on ChatGPT** is officially available on the **ChatGPT GPTs Store**. This is a **purely non-profit** GPT that lets you generate Minecraft building files instantly—no local setup needed.
+
+**What’s the difference?**
+
+* **BuilderGPT (Local, open-source & free):**
+  Built on the **CyniaAgents** framework. You run it on your own machine, configure the environment, and use **your own API key**.
+* **BuilderGPT on ChatGPT (new):**
+  Runs entirely inside ChatGPT and our cloud server. **No install, no keys, no config.** From today, you can use **OpenAI’s GPT-5** model **for free** to quickly get the files you want!
+
+* Zero setup—just open and build
+* Fast, consistent outputs powered by GPT-5
+* Free to use, community-first
+
+**Try it Here** https://chatgpt.com/g/g-68e21df749f48191b94f57c3d5faa57a-mc-builder-buildergpt
+
 ## Installation
 
 1. Install the Cynia Agents framework by following the instructions in its repository.
