@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BuilderGPT Preview</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0b0f14;
+        color: #f3f6fb;
+        font-family: system-ui, sans-serif;
+      }
+      #viewer {
+        position: absolute;
+        inset: 0;
+      }
+      #overlay {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        padding: 8px 12px;
+        background: rgba(10, 14, 20, 0.65);
+        border-radius: 6px;
+        backdrop-filter: blur(6px);
+        font-size: 14px;
+        line-height: 1.4;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="viewer"></canvas>
+    <div id="overlay">Left: pan · Right: rotate · Wheel: zoom · R: reset</div>
+    <script type="module">
+      const CONFIG = __PAYLOAD__;
+
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.161/build/three.module.js';
+      import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.161/examples/jsm/controls/OrbitControls.js';
+      import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.161/examples/jsm/loaders/GLTFLoader.js';
+
+      const canvas = document.getElementById('viewer');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.renderScale ?? 1.5));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0b0f14);
+
+      const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, CONFIG.maxDistance || 2048);
+      camera.position.set(32, 32, 32);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.08;
+      controls.screenSpacePanning = true;
+      controls.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.ROTATE,
+      };
+
+      const ambient = new THREE.HemisphereLight(0xffffff, 0x1a2230, CONFIG.ambientOcclusion ? 0.9 : 0.5);
+      scene.add(ambient);
+      const sun = new THREE.DirectionalLight(0xffffff, CONFIG.ambientOcclusion ? 1.0 : 0.7);
+      scene.add(sun);
+
+      const loader = new GLTFLoader();
+      let loadedObject = null;
+
+      function setSunFromAngles(az, el) {
+        const radius = 2000;
+        const x = radius * Math.cos(el) * Math.cos(az);
+        const y = radius * Math.sin(el);
+        const z = radius * Math.cos(el) * Math.sin(az);
+        sun.position.set(x, y, z);
+      }
+
+      setSunFromAngles(CONFIG.sunAz ?? 1.2, CONFIG.sunEl ?? 0.8);
+
+      let gridHelper;
+      if (CONFIG.showGrid) {
+        gridHelper = new THREE.GridHelper(256, 32, 0x516079, 0x202937);
+        scene.add(gridHelper);
+      }
+
+      function applyWireframe(object, wireframe) {
+        object.traverse((child) => {
+          if (child.isMesh) {
+            child.material = child.material.clone();
+            child.material.wireframe = wireframe;
+          }
+        });
+      }
+
+      function loadGlb() {
+        const base64 = CONFIG.base64_glb.split(',')[1];
+        const binary = atob(base64);
+        const array = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) {
+          array[i] = binary.charCodeAt(i);
+        }
+        loader.parse(array.buffer, '', (gltf) => {
+          loadedObject = gltf.scene;
+          scene.add(loadedObject);
+          applyWireframe(loadedObject, CONFIG.wireframe);
+          fitCameraToObject(loadedObject);
+        });
+      }
+
+      function fitCameraToObject(object) {
+        const box = new THREE.Box3().setFromObject(object);
+        if (!box.isEmpty()) {
+          const size = box.getSize(new THREE.Vector3());
+          const center = box.getCenter(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const distance = maxDim * 1.6;
+          camera.position.set(center.x + distance, center.y + distance * 0.7, center.z + distance);
+          camera.lookAt(center);
+          controls.target.copy(center);
+          controls.update();
+        }
+      }
+
+      function resetView() {
+        controls.target.set(0, 0, 0);
+        camera.position.set(32, 32, 32);
+        controls.update();
+      }
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'r' || event.key === 'R') {
+          if (loadedObject) {
+            fitCameraToObject(loadedObject);
+          }
+        }
+      });
+
+      function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      animate();
+      loadGlb();
+    </script>
+  </body>
+</html>
