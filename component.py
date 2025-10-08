@@ -1,13 +1,18 @@
 import json
+import math
 import os
 import uuid
-import mcschematic
-from component_base import BaseComponent
-import streamlit as st
-import artifact_manager
+from typing import Optional
 
+import mcschematic
+import streamlit as st
+from streamlit.components.v1 import html
+
+import artifact_manager
+from component_base import BaseComponent
 from utils import LLM
 from . import core
+from app.preview import PreviewOptions, build_preview
 
 class BuilderGPTComponent(BaseComponent):
     name = "BuilderGPT"
@@ -20,6 +25,7 @@ class BuilderGPTComponent(BaseComponent):
     # Class-level flag to prevent multiple initializations
     _initialized = False
     _instance = None
+    _viewer_template: Optional[str] = None
 
     def __init__(self):
         # Prevent multiple initializations
@@ -125,21 +131,61 @@ class BuilderGPTComponent(BaseComponent):
             progress.progress(1.0)
         return path
 
+    def _load_viewer_template(self) -> str:
+        if BuilderGPTComponent._viewer_template is None:
+            viewer_path = os.path.join(
+                os.path.dirname(__file__), "app", "viewer", "index.html"
+            )
+            with open(viewer_path, "r", encoding="utf-8") as fp:
+                BuilderGPTComponent._viewer_template = fp.read()
+        return BuilderGPTComponent._viewer_template
+
     def render(self):
         st.title("BuilderGPT")
-        
+
         # Game version and export type selection
         versions = [attr.name for attr in mcschematic.Version]
         version = st.selectbox("Game Version", versions)
         export_type = st.radio("Export Type", ["schem", "mcfunction"])
-        
+
         # Text input (required)
         description = st.text_area("Description", placeholder="Describe the structure you want to build...")
-        
+
+        resource_pack_file = st.file_uploader(
+            "Optional resource pack (.zip)",
+            type=["zip"],
+            help="Upload a resource pack to colourise the preview (optional)",
+        )
+        resource_pack_bytes = resource_pack_file.getvalue() if resource_pack_file else None
+
+        with st.expander("Preview Settings", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            sun_az_deg = col1.slider("Sun azimuth (°)", 0.0, 360.0, 60.0)
+            sun_el_deg = col1.slider("Sun elevation (°)", -30.0, 90.0, 35.0)
+            max_dpr = col1.slider("Max device pixel ratio", 0.5, 3.0, 1.6)
+
+            render_scale = col2.slider("Render scale", 0.5, 2.0, 1.0, help="Clamp renderer pixel ratio for performance")
+            max_distance = col2.slider("Max draw distance", 64.0, 2048.0, 512.0)
+            show_grid = col2.checkbox("Show grid", value=True)
+
+            wireframe = col3.checkbox("Wireframe", value=False)
+            ambient_occlusion = col3.checkbox("Ambient occlusion", value=True)
+
+        preview_options = PreviewOptions(
+            sun_azimuth=math.radians(sun_az_deg),
+            sun_elevation=math.radians(sun_el_deg),
+            max_dpr=max_dpr,
+            render_scale=render_scale,
+            max_draw_distance=max_distance,
+            show_grid=show_grid,
+            wireframe=wireframe,
+            ambient_occlusion=ambient_occlusion,
+        )
+
         # Image input (optional)
         st.markdown("**Optional: Upload Reference Image**")
         uploaded_file = st.file_uploader(
-            "Upload an image for reference (optional)", 
+            "Upload an image for reference (optional)",
             type=['png', 'jpg', 'jpeg', 'gif', 'bmp'],
             help="Upload an image to help the AI understand the structure you want to build"
         )
@@ -166,9 +212,11 @@ class BuilderGPTComponent(BaseComponent):
                 path = self.generate(description, version, export_type, image_path, progress)
                 if path:
                     st.success(f"File saved to {path} and added to Artifact Center")
+                    if export_type == "schem":
+                        self._render_preview(path, resource_pack_bytes, preview_options)
                 else:
                     st.error("Failed to generate schematic")
-                
+
                 # Clean up temporary image file
                 if image_path and os.path.exists(image_path):
                     try:
@@ -177,6 +225,58 @@ class BuilderGPTComponent(BaseComponent):
                         pass  # Ignore cleanup errors
             else:
                 st.warning("Please provide a description of the structure you want to build.")
+
+    @staticmethod
+    @st.cache_data(show_spinner=False)
+    def _cached_preview(
+        schem_bytes: bytes,
+        resource_pack_bytes: Optional[bytes],
+        options_dict: dict,
+    ) -> dict:
+        options = PreviewOptions(**options_dict)
+        payload = build_preview(schem_bytes, resource_pack_bytes, options)
+        params = payload.to_viewer_params(options)
+        params_json = json.dumps(params).replace("</", "<\\/")
+        return {
+            "params_json": params_json,
+            "center": payload.center,
+            "size": payload.size,
+        }
+
+    def _render_preview(
+        self,
+        schem_path: str,
+        resource_pack_bytes: Optional[bytes],
+        options: PreviewOptions,
+    ) -> None:
+        try:
+            with open(schem_path, "rb") as fp:
+                schem_bytes = fp.read()
+        except OSError as exc:
+            st.warning(f"Preview unavailable: {exc}")
+            return
+
+        try:
+            preview_data = self._cached_preview(
+                schem_bytes,
+                resource_pack_bytes,
+                options.to_serializable(),
+            )
+        except Exception as exc:
+            st.warning(f"Failed to build preview: {exc}")
+            return
+
+        viewer_html = self._load_viewer_template()
+        html_content = viewer_html.replace("__PAYLOAD__", preview_data["params_json"])
+        html(html_content, height=720)
+
+        center = preview_data.get("center", (0, 0, 0))
+        size = preview_data.get("size", (0, 0, 0))
+        st.caption(
+            "Preview bounds center: "
+            f"({center[0]:.2f}, {center[1]:.2f}, {center[2]:.2f}) · size: "
+            f"({size[0]:.2f}, {size[1]:.2f}, {size[2]:.2f})"
+        )
 
 
 def get_component():
