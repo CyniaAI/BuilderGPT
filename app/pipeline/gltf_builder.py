@@ -153,10 +153,10 @@ def mesh_to_glb(mesh: MeshBuffers, atlas: AtlasResult) -> GLBResult:
         ],
         "samplers": [
             {
-                "magFilter": 9729,
-                "minFilter": 9987,
-                "wrapS": 10497,
-                "wrapT": 10497,
+                "magFilter": 9728,  # NEAREST
+                "minFilter": 9728,  # NEAREST (no mipmaps to prevent bleeding)
+                "wrapS": 33071,  # CLAMP_TO_EDGE
+                "wrapT": 33071,
             }
         ],
         "images": [

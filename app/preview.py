@@ -61,6 +61,11 @@ def build_preview(
     resource_pack_bytes: Optional[bytes],
     options: PreviewOptions,
 ) -> PreviewPayload:
+    # Guardrail: avoid extremely large uploads causing long CPU-bound stalls
+    # 50 MB is generous for a .schem file; adjust as needed
+    MAX_SCHEM_BYTES = 50 * 1024 * 1024
+    if len(schem_bytes) > MAX_SCHEM_BYTES:
+        raise ValueError("Schematic too large to preview (over 50 MB)")
     with tempfile.TemporaryDirectory() as tmpdir:
         schem_path = os.path.join(tmpdir, "structure.schem")
         with open(schem_path, "wb") as fp:

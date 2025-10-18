@@ -68,7 +68,8 @@ def build_mesh(faces: Sequence[BakedFace], atlas_uv: dict[str, tuple[float, floa
     indices: List[int] = []
 
     vertex_offset = 0
-    quad_indices = np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)
+    # Use counter-clockwise winding when looking from the face normal so front faces render.
+    quad_indices = np.array([0, 2, 1, 0, 3, 2], dtype=np.uint32)
 
     for face in faces:
         rect = atlas_uv.get(face.texture_key)

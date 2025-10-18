@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import io
 import os
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Iterable
 
 import numpy as np
 
@@ -41,12 +40,12 @@ def _parse_palette_entry(block_state: str) -> PaletteEntry:
     return PaletteEntry(name, prop_dict)
 
 
-def _decode_block_data(
+def _decode_packed_block_states(
     data: Iterable[int],
     palette_size: int,
     total_blocks: int,
 ) -> np.ndarray:
-    """Decode Sponge schematic block data bitstream."""
+    """Decode legacy Sponge schematic block data packed into 64-bit longs."""
 
     # Minimum bits per block is 4 according to the Sponge schematic spec.
     bits_per_block = max(4, (palette_size - 1).bit_length())
@@ -68,6 +67,40 @@ def _decode_block_data(
 
     if index < total_blocks:
         # Pad remaining values with zeros (air)
+        values[index:] = 0
+    return values
+
+
+def _decode_varint_block_data(
+    data: Iterable[int],
+    total_blocks: int,
+) -> np.ndarray:
+    """Decode schematic block data stored as Minecraft-style VarInts."""
+
+    values = np.zeros(total_blocks, dtype=np.int32)
+    value = 0
+    shift = 0
+    index = 0
+
+    for raw in data:
+        byte = int(raw) & 0xFF
+        value |= (byte & 0x7F) << shift
+        if (byte & 0x80) == 0:
+            if index < total_blocks:
+                values[index] = value
+            index += 1
+            value = 0
+            shift = 0
+            if index >= total_blocks:
+                break
+        else:
+            shift += 7
+            if shift >= 35:
+                # Defensive reset on malformed data that never terminates.
+                value = 0
+                shift = 0
+
+    if index < total_blocks:
         values[index:] = 0
     return values
 
@@ -96,16 +129,22 @@ def load_structure(input_path: str) -> StructureData:
     for block_state, value in palette_tag.items():
         palette_reverse[int(value)] = _parse_palette_entry(block_state)
 
-    palette: Tuple[PaletteEntry, ...] = tuple(
-        palette_reverse[index]
-        for index in sorted(palette_reverse.keys())
-    )
+    if palette_reverse:
+        max_index = max(palette_reverse.keys())
+    else:
+        max_index = 0
+    palette_list = [
+        PaletteEntry("minecraft:air", {})
+        for _ in range(max_index + 1)
+    ]
+    for palette_index, entry in palette_reverse.items():
+        if 0 <= palette_index < len(palette_list):
+            palette_list[palette_index] = entry
 
     total_blocks = width * height * length
-    block_data: Iterable[int]
     block_data_tag = root.get("BlockData")
     if block_data_tag is not None:
-        block_data = block_data_tag
+        indices = _decode_varint_block_data(block_data_tag, total_blocks)
     else:
         # Legacy schematics may store data as a LongArray named `BlockStates`
         block_states_tag = root.get("BlockStates")
@@ -116,9 +155,7 @@ def load_structure(input_path: str) -> StructureData:
         for long_val in block_states_tag:
             value = int(long_val)
             raw_bytes.extend(value.to_bytes(8, byteorder="little", signed=False))
-        block_data = raw_bytes
-
-    indices = _decode_block_data(block_data, len(palette), total_blocks)
+        indices = _decode_packed_block_states(raw_bytes, len(palette_list), total_blocks)
 
     voxels = np.zeros((width, height, length), dtype=np.int32)
     for i, palette_index in enumerate(indices[:total_blocks]):
@@ -128,4 +165,4 @@ def load_structure(input_path: str) -> StructureData:
         voxels[x, y, z] = palette_index
 
     bounds = StructureBounds(0, 0, 0, width - 1, height - 1, length - 1)
-    return StructureData(bounds, list(palette), voxels)
+    return StructureData(bounds, palette_list, voxels)
