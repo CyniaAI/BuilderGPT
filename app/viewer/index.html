@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>BuilderGPT Preview</title>
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0b0f14;
+        color: #f3f6fb;
+        font-family: system-ui, sans-serif;
+      }
+      #viewer {
+        position: absolute;
+        inset: 0;
+      }
+      #overlay {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        padding: 8px 12px;
+        background: rgba(10, 14, 20, 0.65);
+        border-radius: 6px;
+        backdrop-filter: blur(6px);
+        font-size: 14px;
+        line-height: 1.4;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="viewer"></canvas>
+    <div id="overlay">Left: pan · Right: rotate · Wheel: zoom · R: reset</div>
+    <script type="module">
+      const CONFIG = __PAYLOAD__;
+      const MODULE_SOURCES = {
+        three: "__THREE_MODULE__",
+        controls: "__ORBIT_CONTROLS__",
+        gltf: "__GLTF_LOADER__",
+        bufferUtils: "__BUFFER_GEOMETRY_UTILS__",
+      };
+
+      const createModuleUrl = (base64, transform) => {
+        let source = atob(base64);
+        if (typeof transform === 'function') {
+          source = transform(source);
+        }
+        return URL.createObjectURL(
+          new Blob([source], { type: 'application/javascript' }),
+        );
+      };
+
+      const revokeModuleUrls = (urls) => {
+        const unique = Array.from(new Set(urls.filter(Boolean)));
+        if (!unique.length) {
+          return;
+        }
+        const cleanup = () => unique.forEach((url) => URL.revokeObjectURL(url));
+        window.addEventListener('unload', cleanup, { once: true });
+        setTimeout(cleanup, 0);
+      };
+
+      const canvas = document.getElementById('viewer');
+      const showViewerError = (msg) => {
+        const div = document.createElement('div');
+        div.style.position = 'absolute';
+        div.style.top = '50%';
+        div.style.left = '50%';
+        div.style.transform = 'translate(-50%, -50%)';
+        div.style.padding = '12px 16px';
+        div.style.maxWidth = '720px';
+        div.style.background = 'rgba(10, 14, 20, 0.8)';
+        div.style.border = '1px solid #2a3546';
+        div.style.borderRadius = '8px';
+        div.style.boxShadow = '0 6px 24px rgba(0,0,0,0.35)';
+        div.style.color = '#f3f6fb';
+        div.style.font = '14px system-ui, sans-serif';
+        div.style.pointerEvents = 'none';
+        div.innerHTML = `Preview unavailable.<br/><small style="opacity:.8">${msg}</small>`;
+        document.body.appendChild(div);
+      };
+
+      (async () => {
+        const moduleUrls = {};
+        try {
+          moduleUrls.three = createModuleUrl(MODULE_SOURCES.three);
+          moduleUrls.bufferUtils = createModuleUrl(
+            MODULE_SOURCES.bufferUtils,
+            (code) => code.replace(/from 'three'/g, `from '${moduleUrls.three}'`),
+          );
+          moduleUrls.controls = createModuleUrl(
+            MODULE_SOURCES.controls,
+            (code) => code.replace(/from 'three'/g, `from '${moduleUrls.three}'`),
+          );
+          moduleUrls.gltf = createModuleUrl(
+            MODULE_SOURCES.gltf,
+            (code) => code
+              .replace(/from 'three'/g, `from '${moduleUrls.three}'`)
+              .replace(/'\.\.\/utils\/BufferGeometryUtils\.js'/g, `'${moduleUrls.bufferUtils}'`)
+              .replace(/"\.\.\/utils\/BufferGeometryUtils\.js"/g, `"${moduleUrls.bufferUtils}"`),
+          );
+
+          const [threeMod, controlsMod, loaderMod] = await Promise.all([
+            import(moduleUrls.three),
+            import(moduleUrls.controls),
+            import(moduleUrls.gltf),
+          ]);
+
+          const THREE = threeMod;
+          const { OrbitControls } = controlsMod;
+          const { GLTFLoader } = loaderMod;
+
+          const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio, CONFIG.maxDPR ?? 1.6));
+          renderer.setSize(window.innerWidth, window.innerHeight);
+
+          const scene = new THREE.Scene();
+          scene.background = new THREE.Color(0x0b0f14);
+
+          const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, CONFIG.maxDistance || 2048);
+          camera.position.set(32, 32, 32);
+
+          const controls = new OrbitControls(camera, renderer.domElement);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.08;
+          controls.screenSpacePanning = true;
+          controls.mouseButtons = {
+            LEFT: THREE.MOUSE.PAN,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.ROTATE,
+          };
+
+          const ambient = new THREE.HemisphereLight(0xffffff, 0x1a2230, CONFIG.ambientOcclusion ? 0.9 : 0.5);
+          scene.add(ambient);
+          const sun = new THREE.DirectionalLight(0xffffff, CONFIG.ambientOcclusion ? 1.0 : 0.7);
+          scene.add(sun);
+
+          function setSunFromAngles(az, el) {
+            const radius = 2000;
+            const x = radius * Math.cos(el) * Math.cos(az);
+            const y = radius * Math.sin(el);
+            const z = radius * Math.cos(el) * Math.sin(az);
+            sun.position.set(x, y, z);
+          }
+
+          setSunFromAngles(CONFIG.sunAz ?? 1.2, CONFIG.sunEl ?? 0.8);
+
+          let gridHelper;
+          if (CONFIG.showGrid) {
+            gridHelper = new THREE.GridHelper(256, 32, 0x516079, 0x202937);
+            gridHelper.position.y = -0.01;
+            const gridMaterials = Array.isArray(gridHelper.material)
+              ? gridHelper.material
+              : [gridHelper.material];
+            gridMaterials.forEach((mat) => {
+              mat.depthWrite = false;
+              mat.transparent = true;
+              mat.opacity = 0.5;
+            });
+            gridHelper.renderOrder = -1;
+            scene.add(gridHelper);
+          }
+
+          function applyWireframe(object, wireframe) {
+            object.traverse((child) => {
+              if (child.isMesh) {
+                child.material = child.material.clone();
+                child.material.wireframe = wireframe;
+              }
+            });
+          }
+
+          const loader = new GLTFLoader();
+          let loadedObject = null;
+
+          function loadGlb() {
+            const base64 = (CONFIG.base64_glb || '').split(',')[1];
+            if (!base64) return;
+            const binary = atob(base64);
+            const array = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) {
+              array[i] = binary.charCodeAt(i);
+            }
+            loader.parse(array.buffer, '', (gltf) => {
+              loadedObject = gltf.scene;
+              scene.add(loadedObject);
+              applyWireframe(loadedObject, CONFIG.wireframe);
+              fitCameraToObject(loadedObject);
+            });
+          }
+
+          function fitCameraToObject(object) {
+            const box = new THREE.Box3().setFromObject(object);
+            if (!box.isEmpty()) {
+              const size = box.getSize(new THREE.Vector3());
+              const center = box.getCenter(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z);
+              const distance = maxDim * 1.6;
+              camera.position.set(center.x + distance, center.y + distance * 0.7, center.z + distance);
+              camera.lookAt(center);
+              controls.target.copy(center);
+              controls.update();
+            }
+          }
+
+          window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+          });
+
+          window.addEventListener('keydown', (event) => {
+            if (event.key === 'r' || event.key === 'R') {
+              if (loadedObject) {
+                fitCameraToObject(loadedObject);
+              }
+            }
+          });
+
+          function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+          }
+
+          animate();
+          loadGlb();
+        } catch (err) {
+          const detail = (err && (err.message || String(err))) || 'Unknown error';
+          showViewerError('Failed to initialize the preview viewer.\n\n' + detail);
+        } finally {
+          revokeModuleUrls(Object.values(moduleUrls));
+        }
+      })();
+    </script>
+  </body>
+</html>
