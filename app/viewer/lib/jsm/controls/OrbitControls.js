@@ -670,7 +670,7 @@ class OrbitControls extends EventDispatcher {
 
 		function handleMouseDownDolly( event ) {
 
-			updateZoomParameters( event.clientX, event.clientX );
+			updateZoomParameters( event.clientX, event.clientY );
 			dollyStart.set( event.clientX, event.clientY );
 
 		}
