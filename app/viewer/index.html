@@ -78,7 +78,15 @@
         div.style.color = '#f3f6fb';
         div.style.font = '14px system-ui, sans-serif';
         div.style.pointerEvents = 'none';
-        div.innerHTML = `Preview unavailable.<br/><small style="opacity:.8">${msg}</small>`;
+        // Use text nodes and DOM methods to avoid HTML injection
+        const mainMsg = document.createTextNode('Preview unavailable.');
+        const br = document.createElement('br');
+        const small = document.createElement('small');
+        small.style.opacity = '.8';
+        small.textContent = msg;
+        div.appendChild(mainMsg);
+        div.appendChild(br);
+        div.appendChild(small);
         document.body.appendChild(div);
       };
 
