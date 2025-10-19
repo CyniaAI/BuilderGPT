@@ -1,4 +1,8 @@
+amulet-core==1.9.30
+pymctranslate==1.2.35
+Pillow>=10.0.0
+numpy>=1.26.0
+nbtlib>=2.0.4
 immutable_views
-nbtlib
 quickjs
 mcschematic
