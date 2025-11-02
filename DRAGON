@@ -1,0 +1,114 @@
+/**
+ * Dragon esquelético volador - implementacion buildCreation
+ * Usa: safeFill, safeSetBlock, safeFillBiome (síncrono)
+ *
+ * @param startX - X inicial (punto de anclaje)
+ * @param startY - Y inicial (nivel del suelo)
+ * @param startZ - Z inicial (punto de anclaje)
+ */
+function buildCreation(startX, startY, startZ) {
+  // Altura sobre el suelo donde flotará el dragón
+  const baseY = startY + 5;
+
+  // --- Columna vertebral / eje central ---
+  // Largo de la columna (ajustable)
+  const spineLen = 22;
+  for (let i = 0; i < spineLen; i++) {
+    // Vertebra central
+    safeSetBlock(startX + i, baseY, startZ, "quartz_block", { mode: "replace" });
+    // pequeños acentos alternos con cuarzo liso
+    if (i % 2 === 0) {
+      safeSetBlock(startX + i, baseY + 1, startZ, "smooth_quartz_block", { mode: "replace" });
+    }
+  }
+
+  // --- Costillas (izquierda y derecha) ---
+  // Se usan pilares verticales que simulan huesos largos curvados
+  for (let i = 1; i < spineLen - 1; i += 2) {
+    // costilla izquierda (curva hacia -Z)
+    safeFill(startX + i, baseY - 1, startZ - 1, startX + i, baseY + 3, startZ - 5, "quartz_pillar", { mode: "replace" });
+    // costilla derecha (curva hacia +Z)
+    safeFill(startX + i, baseY - 1, startZ + 1, startX + i, baseY + 3, startZ + 5, "quartz_pillar", { mode: "replace" });
+    // conectar la base de la costilla al cuerpo con losas para suavizar
+    safeSetBlock(startX + i, baseY, startZ - 1, "quartz_slab", { mode: "replace" });
+    safeSetBlock(startX + i, baseY, startZ + 1, "quartz_slab", { mode: "replace" });
+  }
+
+  // --- Cabeza ---
+  // Caja base del cráneo (alargada)
+  safeFill(startX + spineLen, baseY, startZ - 1, startX + spineLen + 3, baseY + 2, startZ + 1, "smooth_quartz_block", { mode: "replace" });
+  // Frente del cráneo (morro)
+  safeSetBlock(startX + spineLen + 4, baseY + 1, startZ, "quartz_block", { mode: "replace" });
+  // Acentos de mandíbula con escaleras orientadas hacia delante
+  safeSetBlock(startX + spineLen + 3, baseY, startZ - 1, "quartz_stairs", { blockStates: { facing: "north" }, mode: "replace" });
+  safeSetBlock(startX + spineLen + 3, baseY, startZ + 1, "quartz_stairs", { blockStates: { facing: "south" }, mode: "replace" });
+
+  // Cuernos curvados (simples pero efectivos)
+  safeSetBlock(startX + spineLen + 2, baseY + 3, startZ - 2, "quartz_stairs", { blockStates: { facing: "west" }, mode: "replace" });
+  safeSetBlock(startX + spineLen + 2, baseY + 3, startZ + 2, "quartz_stairs", { blockStates: { facing: "west" }, mode: "replace" });
+  safeSetBlock(startX + spineLen + 1, baseY + 4, startZ - 3, "quartz_slab", { mode: "replace" });
+  safeSetBlock(startX + spineLen + 1, baseY + 4, startZ + 3, "quartz_slab", { mode: "replace" });
+
+  // Ojo (vacío con contorno)
+  safeSetBlock(startX + spineLen + 2, baseY + 1, startZ - 1, "quartz_block", { mode: "replace" });
+  safeSetBlock(startX + spineLen + 2, baseY + 1, startZ + 1, "quartz_block", { mode: "replace" });
+
+  // --- Cuello serpenteante ---
+  // Curva hacia atrás con mezcla de bloques y pilares
+  const neckLen = 6;
+  for (let n = 0; n < neckLen; n++) {
+    const nx = startX + spineLen - (n * 1) - 1;
+    const ny = baseY + Math.floor((n + 1) / 2); // ligera elevación
+    const nz = startZ + (n % 2 === 0 ? -1 : 1); // zig-zag para curva
+    safeSetBlock(nx, ny, nz, "quartz_pillar", { mode: "replace" });
+    if (n % 2 === 0) safeSetBlock(nx, ny + 1, nz, "smooth_quartz_block", { mode: "replace" });
+  }
+
+  // --- Cola curvada ---
+  const tailLen = 12;
+  for (let t = 1; t <= tailLen; t++) {
+    const tx = startX - t;
+    const ty = baseY - Math.floor(t / 3);
+    // alternar bloques para textura
+    safeSetBlock(tx, ty, startZ, (t % 3 === 0) ? "smooth_quartz_block" : "quartz_block", { mode: "replace" });
+    // pequeñas espinas laterales cada 3 bloques
+    if (t % 3 === 0) {
+      safeSetBlock(tx, ty + 1, startZ - 1, "quartz_slab", { mode: "replace" });
+      safeSetBlock(tx, ty + 1, startZ + 1, "quartz_slab", { mode: "replace" });
+    }
+  }
+  // punta de la cola
+  safeSetBlock(startX - tailLen, baseY - Math.floor(tailLen / 3) - 1, startZ, "quartz_stairs", { blockStates: { facing: "west" }, mode: "replace" });
+
+  // --- Alas (grandes, esqueléticas) ---
+  // Ala izquierda: huesos principales (pilares) + "membrana" con losas de cuarzo
+  // Huesos dedos: rayos desde el cuerpo hacia -Z
+  const wingStartX = startX + 4; // punto donde arrancan las alas
+  // huesos principales (izquierda)
+  safeFill(wingStartX, baseY + 2, startZ - 6, wingStartX + 8, baseY + 2, startZ - 14, "quartz_pillar", { mode: "replace" });
+  // membrana con losas escalonadas para dar sensación de rotura
+  safeFill(wingStartX + 1, baseY + 1, startZ - 8, wingStartX + 7, baseY + 1, startZ - 13, "quartz_slab", { mode: "replace" });
+  safeFill(wingStartX + 2, baseY, startZ - 10, wingStartX + 6, baseY, startZ - 12, "quartz_slab", { mode: "replace" });
+
+  // Ala derecha (simétrica)
+  safeFill(wingStartX, baseY + 2, startZ + 6, wingStartX + 8, baseY + 2, startZ + 14, "quartz_pillar", { mode: "replace" });
+  safeFill(wingStartX + 1, baseY + 1, startZ + 8, wingStartX + 7, baseY + 1, startZ + 13, "quartz_slab", { mode: "replace" });
+  safeFill(wingStartX + 2, baseY, startZ + 10, wingStartX + 6, baseY, startZ + 12, "quartz_slab", { mode: "replace" });
+
+  // refuerzos en las uniones de alas con la espalda (detalles)
+  for (let w = wingStartX; w < wingStartX + 9; w += 2) {
+    safeSetBlock(w, baseY + 2, startZ - 5, "quartz_stairs", { blockStates: { facing: "north" }, mode: "replace" });
+    safeSetBlock(w, baseY + 2, startZ + 5, "quartz_stairs", { blockStates: { facing: "south" }, mode: "replace" });
+  }
+
+  // --- Detalles dorsales (espinas pequeñas) ---
+  for (let s = 2; s < spineLen - 2; s += 3) {
+    safeSetBlock(startX + s, baseY + 2, startZ, "quartz_slab", { mode: "replace" });
+    safeSetBlock(startX + s, baseY + 3, startZ, "quartz_stairs", { blockStates: { facing: "up" }, mode: "replace" });
+  }
+
+  // --- Ajuste de biome opcional (si quieres un cielo claro encima) ---
+  // safeFillBiome(startX - 10, startY, startZ - 20, startX + 40, startY + 50, startZ + 20, "plains");
+
+  // Fin de la construcción
+}
