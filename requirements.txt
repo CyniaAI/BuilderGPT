@@ -6,3 +6,4 @@ nbtlib>=2.0.4
 immutable_views
 quickjs
 mcschematic
+cynia-agents

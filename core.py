@@ -3,8 +3,8 @@ import os
 import re
 import mcschematic
 from typing import Dict, List, Optional, Tuple
-from log_writer import logger
-from utils import LLM
+from cynia_agents.log_writer import logger
+from cynia_agents.utils import LLM
 
 llm = LLM()
 

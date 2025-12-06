@@ -9,9 +9,9 @@ import mcschematic
 import streamlit as st
 from streamlit.components.v1 import html
 
-import artifact_manager
-from component_base import BaseComponent
-from utils import LLM
+from cynia_agents import artifact_manager
+from cynia_agents.component_base import BaseComponent
+from cynia_agents.utils import LLM
 from . import core
 from .app.preview import PreviewOptions, build_preview
 
